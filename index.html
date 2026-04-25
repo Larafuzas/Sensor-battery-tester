@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sensor Battery Monitor v1.2</title>
+    <link rel="manifest" href="manifest.json">
+    <style>
+        :root {
+            --bg-color: #000000;
+            --card-bg: #121212;
+            --text-main: #ffffff;
+            --text-dim: #a0a0a0;
+            --accent: #3b82f6;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .container {
+            width: 90%;
+            max-width: 400px;
+            text-align: center;
+        }
+
+        #sensor-info {
+            margin-bottom: 2rem;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+        }
+
+        h1 { font-weight: 300; font-size: 1.5rem; margin-bottom: 0.5rem; }
+        p { color: var(--text-dim); font-size: 0.9rem; margin: 0; }
+
+        /* Barra de Batería */
+        .battery-container {
+            width: 100%;
+            height: 40px;
+            background: #222;
+            border-radius: 20px;
+            margin: 2rem 0;
+            position: relative;
+            border: 1px solid #333;
+            overflow: hidden;
+        }
+
+        #battery-bar {
+            height: 100%;
+            width: 0%;
+            transition: width 1s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.5s;
+        }
+
+        #battery-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-weight: bold;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+        }
+
+        button {
+            background-color: var(--accent);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 30px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
+            transition: transform 0.2s;
+        }
+
+        button:active { transform: scale(0.95); }
+        
+        .status-tag {
+            display: inline-block;
+            padding: 4px 12px;
+            background: #333;
+            border-radius: 12px;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div id="sensor-info">
+            <span class="status-tag" id="sensor-type">Desconocido</span>
+            <h1 id="device-name">Sin Dispositivo</h1>
+            <p id="device-desc">Conecta un sensor para ver los detalles.</p>
+            
+            <div class="battery-container">
+                <div id="battery-bar"></div>
+                <div id="battery-text">0%</div>
+            </div>
+        </div>
+
+        <button id="connect-btn">CONECTAR SENSOR</button>
+    </div>
+
+    <script>
+        const connectBtn = document.getElementById('connect-btn');
+        const batteryBar = document.getElementById('battery-bar');
+        const batteryText = document.getElementById('battery-text');
+        const deviceName = document.getElementById('device-name');
+        const deviceType = document.getElementById('sensor-type');
+        const deviceDesc = document.getElementById('device-desc');
+        const infoContainer = document.getElementById('sensor-info');
+
+        async function connectBluetooth() {
+            try {
+                const device = await navigator.bluetooth.requestDevice({
+                    filters: [{ services: ['battery_service'] }],
+                    optionalServices: ['heart_rate', 'cycling_speed_and_cadence']
+                });
+
+                deviceName.innerText = device.name || "Sensor Genérico";
+                infoContainer.style.opacity = "1";
+                
+                // Lógica de identificación (Simulada para v1.2)
+                if(device.name.toLowerCase().includes('hr') || device.name.toLowerCase().includes('heart')) {
+                    deviceType.innerText = "Monitor Cardíaco";
+                    deviceDesc.innerText = "Mide pulsaciones por minuto y variabilidad.";
+                } else {
+                    deviceType.innerText = "Sensor BLE";
+                    deviceDesc.innerText = "Dispositivo de telemetría estándar.";
+                }
+
+                const server = await device.gatt.connect();
+                const service = await server.getPrimaryService('battery_service');
+                const characteristic = await service.getCharacteristic('battery_level');
+
+                // Lectura inicial
+                const value = await characteristic.readValue();
+                updateBatteryUI(value.getUint8(0));
+
+                // Suscribirse a cambios
+                characteristic.startNotifications();
+                characteristic.addEventListener('characteristicvaluechanged', (event) => {
+                    updateBatteryUI(event.target.value.getUint8(0));
+                });
+
+            } catch (error) {
+                console.log("Error de conexión: " + error);
+            }
+        }
+
+        function updateBatteryUI(level) {
+            batteryText.innerText = level + "%";
+            batteryBar.style.width = level + "%";
+
+            // Lógica de colores
+            if (level > 60) {
+                batteryBar.style.backgroundColor = "#22c55e"; // Verde
+            } else if (level > 20) {
+                batteryBar.style.backgroundColor = "#eab308"; // Amarillo
+            } else {
+                batteryBar.style.backgroundColor = "#ef4444"; // Rojo
+            }
+        }
+
+        connectBtn.addEventListener('click', connectBluetooth);
+    </script>
+</body>
+</html>
